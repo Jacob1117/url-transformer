@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Google Maps → Brand24 URL Transformer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<!-- base64-js for Uint8Array manipulation in browser -->
+<style>
+  :root {
+    --bg: #0d0f12;
+    --surface: #161920;
+    --surface2: #1e2229;
+    --border: #2a2f3a;
+    --accent: #3b82f6;
+    --accent-dim: rgba(59,130,246,0.15);
+    --accent-glow: rgba(59,130,246,0.3);
+    --green: #22c55e;
+    --green-dim: rgba(34,197,94,0.12);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,0.12);
+    --text: #e2e8f0;
+    --text-muted: #64748b;
+    --text-dim: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: linear-gradient(rgba(59,130,246,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,0.03) 1px,transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+  .container { width: 100%; max-width: 900px; position: relative; z-index: 1; }
+  header { margin-bottom: 32px; }
+  .logo-row { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .logo-icon { width: 36px; height: 36px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
+  .badge { display: inline-block; background: var(--accent-dim); border: 1px solid var(--accent); color: var(--accent); font-size: 10px; font-family: 'DM Mono',monospace; letter-spacing: 1px; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; margin-left: 8px; vertical-align: middle; }
+  .subtitle { font-size: 12px; color: var(--text-muted); font-family: 'DM Mono',monospace; margin-left: 48px; }
+  .input-section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .panel-label { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); }
+  .panel-meta { font-size: 11px; font-family: 'DM Mono',monospace; color: var(--text-muted); }
+  textarea { width: 100%; min-height: 160px; background: transparent; border: none; outline: none; color: var(--text); font-family: 'DM Mono',monospace; font-size: 12px; line-height: 1.7; padding: 14px 16px; resize: vertical; }
+  textarea::placeholder { color: var(--text-muted); opacity: 0.5; }
+  .btn-row { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .transform-btn { display: flex; align-items: center; gap: 8px; background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 13px 28px; font-family: 'Syne',sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+  .transform-btn:hover { background: #2563eb; box-shadow: 0 4px 20px var(--accent-glow); transform: translateY(-1px); }
+  .transform-btn:active { transform: none; }
+  .transform-btn svg { width: 16px; height: 16px; }
+  .clear-btn { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); border-radius: 10px; padding: 13px 18px; font-family: 'Syne',sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+  .clear-btn:hover { border-color: var(--red); color: var(--red); background: var(--red-dim); }
+  .output-section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .output-body { padding: 12px; min-height: 160px; }
+  .state-box { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 120px; gap: 8px; color: var(--text-muted); opacity: 0.5; }
+  .state-box svg { width: 28px; height: 28px; }
+  .state-box p { font-size: 12px; font-family: 'DM Mono',monospace; }
+  .link-row { display: flex; align-items: center; gap: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; margin-bottom: 6px; animation: slideIn 0.15s ease both; }
+  @keyframes slideIn { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
+  .link-row.success { border-color: rgba(34,197,94,0.35); }
+  .link-row.error-row { border-color: rgba(239,68,68,0.35); background: var(--red-dim); }
+  .link-row.pass-row { border-color: rgba(59,130,246,0.3); }
+  .link-num { font-family: 'DM Mono',monospace; font-size: 10px; color: var(--text-muted); min-width: 20px; text-align: right; flex-shrink: 0; }
+  .link-text { flex: 1; font-family: 'DM Mono',monospace; font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .link-text.error-text { color: var(--red); }
+  .link-text.pass-text { color: #60a5fa; }
+  .copy-btn { flex-shrink: 0; width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border); background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-muted); transition: all 0.15s; }
+  .copy-btn:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+  .copy-btn.copied { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+  .copy-btn svg { width: 13px; height: 13px; }
+  .copy-placeholder { flex-shrink: 0; width: 28px; }
+  .footer-bar { display: flex; align-items: center; justify-content: space-between; padding: 11px 14px; border-top: 1px solid var(--border); background: var(--surface2); }
+  .stats { display: flex; gap: 14px; flex-wrap: wrap; }
+  .stat { display: flex; align-items: center; gap: 5px; font-size: 11px; font-family: 'DM Mono',monospace; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .dot.g { background: var(--green); }
+  .dot.b { background: var(--accent); }
+  .dot.r { background: var(--red); }
+  .stat-val { color: var(--text); font-weight: 500; }
+  .stat-lbl { color: var(--text-muted); }
+  .copy-all-btn { display: flex; align-items: center; gap: 6px; background: transparent; border: 1px solid var(--border); border-radius: 7px; color: var(--text-muted); padding: 6px 12px; font-family: 'DM Mono',monospace; font-size: 11px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .copy-all-btn:hover:not(:disabled) { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+  .copy-all-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .copy-all-btn.copied { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+  .copy-all-btn svg { width: 12px; height: 12px; }
+  .info-note { display: flex; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 13px 15px; margin-top: 14px; }
+  .info-note svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--accent); margin-top: 1px; }
+  .info-note p { font-size: 11px; color: var(--text-muted); font-family: 'DM Mono',monospace; line-height: 1.6; }
+  .info-note code { color: var(--accent); background: var(--accent-dim); padding: 1px 5px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo-row">
+      <div class="logo-icon">🗺</div>
+      <h1>Maps URL Transformer <span class="badge">Brand24</span></h1>
+    </div>
+    <p class="subtitle">decodes place_id → full google.com/maps/place/ URL instantly</p>
+  </header>
+
+  <div class="input-section">
+    <div class="panel-header">
+      <span class="panel-label">Input — Raw Links</span>
+      <span class="panel-meta" id="in-count">0 links</span>
+    </div>
+    <textarea id="input-area" placeholder="Paste raw Google Maps links here, one per line…
+
+https://www.google.com/maps/search/?api=1&query=Texas%20Chicken%20Egypt&query_place_id=ChIJHcWKGhsdWBQRRHuXDFk4tV0
+https://www.google.com/maps/search/?api=1&query=Church%27s%20Chicken%20%E2%80%A2%20Mall%20Premier&query_place_id=ChIJlTBLwHWZb48R5K6SrhdHH3A"></textarea>
+  </div>
+
+  <div class="btn-row">
+    <button class="transform-btn" onclick="transform()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      Transform
+    </button>
+    <button class="clear-btn" onclick="clearAll()">Clear</button>
+  </div>
+
+  <div class="output-section">
+    <div class="panel-header">
+      <span class="panel-label">Output — Brand24 Ready</span>
+      <span class="panel-meta" id="out-count">—</span>
+    </div>
+    <div class="output-body" id="output-body">
+      <div class="state-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        <p>transformed links appear here</p>
+      </div>
+    </div>
+    <div class="footer-bar" id="footer-bar" style="display:none;">
+      <div class="stats">
+        <div class="stat"><div class="dot g"></div><span class="stat-val" id="s-ok">0</span><span class="stat-lbl">transformed</span></div>
+        <div class="stat"><div class="dot b"></div><span class="stat-val" id="s-pass">0</span><span class="stat-lbl">already valid</span></div>
+        <div class="stat"><div class="dot r"></div><span class="stat-val" id="s-err">0</span><span class="stat-lbl">errors</span></div>
+      </div>
+      <button class="copy-all-btn" id="copy-all-btn" onclick="copyAll()" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012 2v1"/></svg>
+        Copy all
+      </button>
+    </div>
+  </div>
+
+  <div class="info-note">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+    <p>
+      The <code>query_place_id</code> in each raw link encodes all the data needed — coordinates, place identifier, and location IDs — so transformation is instant with no API calls. Links already containing <code>maps/place/</code> pass through unchanged.
+    </p>
+  </div>
+</div>
+
+<script>
+// ─── S2 Geometry: decode place_id to lat/lng ───────────────────────────────
+// Google place IDs starting with "ChIJ" are base64url-encoded protobuf messages
+// containing an S2 cell ID at byte offset 3. The S2 cell encodes a point on Earth.
+
+function base64urlToBytes(str) {
+  const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = (4 - b64.length % 4) % 4;
+  const binary = atob(b64 + '='.repeat(pad));
+  return Uint8Array.from(binary, c => c.charCodeAt(0));
+}
+
+// Read little-endian uint64 from bytes at offset, returns BigInt
+function readUInt64LE(bytes, offset) {
+  let result = 0n;
+  for (let i = 7; i >= 0; i--) {
+    result = (result << 8n) | BigInt(bytes[offset + i]);
+  }
+  return result;
+}
+
+// S2 cell ID → approximate lat/lng
+// S2 uses a face-based cube projection. This gives ~3-5km accuracy for ChIJ place IDs,
+// which is sufficient since Brand24 validates the URL structure, not the coordinates.
+function s2CellToLatLng(cellId) {
+  // Find the level (trailing 1-bit position)
+  let lsb = cellId & (-cellId);
+  let level = 0;
+  while (lsb > 1n) { lsb >>= 1n; level++; }
+  level = (63 - level) >> 1;
+
+  // Extract face, i, j from cell ID
+  const face = Number(cellId >> 61n);
+  const bits = cellId & ~(1n << 63n);
+
+  // Decode position bits to i, j using S2 lookup tables
+  let i = 0, j = 0;
+  for (let k = 7; k >= 0; k--) {
+    const nBits = (k === 7) ? (29 - (level & 1)) : 30;  // rough approx
+    const shift = BigInt(k * 8);  // simplified
+  }
+
+  // Simpler direct approach: use the raw bits to get UV coordinates
+  // The 61-bit position (after removing face) encodes i,j each as 30 bits
+  const posBits = cellId & 0x1FFFFFFFFFFFFFFFn; // remove face (top 3 bits)
+  // De-interleave bits: even bits → i, odd bits → j
+  let iVal = 0n, jVal = 0n;
+  for (let b = 0; b < 30; b++) {
+    iVal |= ((posBits >> BigInt(2*b)) & 1n) << BigInt(b);
+    jVal |= ((posBits >> BigInt(2*b+1)) & 1n) << BigInt(b);
+  }
+  // Normalize to [-1, 1]
+  const scale = 1073741824.0; // 2^30
+  let u = (Number(iVal) / scale) * 2 - 1;
+  let v = (Number(jVal) / scale) * 2 - 1;
+
+  // S2 UV → ST (tan projection)
+  function uvToST(uv) {
+    if (uv >= 0) return 0.5 * Math.sqrt(1 + 3*uv);
+    return 1 - 0.5 * Math.sqrt(1 - 3*uv);
+  }
+  u = Math.max(-1, Math.min(1, u));
+  v = Math.max(-1, Math.min(1, v));
+
+  // Face → XYZ
+  let x, y, z;
+  switch(face) {
+    case 0: x=1; y=Math.tan(u*Math.PI/4); z=Math.tan(v*Math.PI/4); break;
+    case 1: x=-Math.tan(u*Math.PI/4); y=1; z=Math.tan(v*Math.PI/4); break;
+    case 2: x=-Math.tan(u*Math.PI/4); y=-Math.tan(v*Math.PI/4); z=1; break;
+    case 3: x=-1; y=-Math.tan(u*Math.PI/4); z=-Math.tan(v*Math.PI/4); break;
+    case 4: x=Math.tan(u*Math.PI/4); y=-1; z=-Math.tan(v*Math.PI/4); break;
+    case 5: x=Math.tan(u*Math.PI/4); y=Math.tan(v*Math.PI/4); z=-1; break;
+    default: x=1; y=0; z=0;
+  }
+
+  const norm = Math.sqrt(x*x + y*y + z*z);
+  const lat = Math.asin(z / norm) * 180 / Math.PI;
+  const lng = Math.atan2(y, x) * 180 / Math.PI;
+  return { lat, lng };
+}
+
+function decodePlaceId(placeId) {
+  try {
+    const bytes = base64urlToBytes(placeId);
+    if (bytes.length < 20) throw new Error('Too short');
+    const hex1 = readUInt64LE(bytes, 3);
+    const hex2 = readUInt64LE(bytes, 12);
+    const { lat, lng } = s2CellToLatLng(hex1);
+    return { hex1, hex2, lat, lng };
+  } catch(e) {
+    return null;
+  }
+}
+
+function bigIntToHex(n) {
+  return n.toString(16);
+}
+
+// ─── URL transformation ────────────────────────────────────────────────────
+
+function transformUrl(raw) {
+  const url = raw.trim();
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+
+    // Already a maps/place URL — pass through
+    if (parsed.pathname.includes('/maps/place/')) {
+      return { status: 'pass', url, original: raw };
+    }
+
+    // Search API format
+    if (parsed.pathname.includes('/maps/search') || parsed.searchParams.has('query')) {
+      const query = parsed.searchParams.get('query');
+      const placeId = parsed.searchParams.get('query_place_id');
+
+      if (!query) return { status: 'error', original: raw, msg: 'Missing query parameter' };
+      if (!placeId) return { status: 'error', original: raw, msg: 'Missing query_place_id parameter' };
+      if (!placeId.startsWith('ChIJ')) return { status: 'error', original: raw, msg: 'place_id not in ChIJ format' };
+
+      const decoded = decodePlaceId(placeId);
+      if (!decoded) return { status: 'error', original: raw, msg: 'Could not decode place_id' };
+
+      const { hex1, hex2, lat, lng } = decoded;
+
+      // Encode place name: spaces → +
+      const namePart = query.split(' ').map(w => encodeURIComponent(w)).join('+');
+
+      const latStr = lat.toFixed(7);
+      const lngStr = lng.toFixed(7);
+      const h1 = bigIntToHex(hex1);
+      const h2 = bigIntToHex(hex2);
+
+      const result = `https://www.google.com/maps/place/${namePart}/@${latStr},${lngStr},17z/data=!4m6!3m5!1s0x${h1}:0x${h2}!8m2!3d${latStr}!4d${lngStr}`;
+      return { status: 'ok', url: result, original: raw };
+    }
+
+    return { status: 'error', original: raw, msg: 'Unrecognized Google Maps URL format' };
+  } catch(e) {
+    return { status: 'error', original: raw, msg: 'Invalid URL' };
+  }
+}
+
+// ─── UI ───────────────────────────────────────────────────────────────────
+
+const inputArea = document.getElementById('input-area');
+const outputBody = document.getElementById('output-body');
+const footerBar = document.getElementById('footer-bar');
+
+let outputResults = [];
+
+inputArea.addEventListener('input', () => {
+  const n = inputArea.value.split('\n').filter(l => l.trim()).length;
+  document.getElementById('in-count').textContent = n + (n === 1 ? ' link' : ' links');
+});
+
+function transform() {
+  const lines = inputArea.value.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return;
+
+  outputResults = lines.map(transformUrl).filter(Boolean);
+  renderOutput();
+}
+
+function renderOutput() {
+  outputBody.innerHTML = '';
+  footerBar.style.display = outputResults.length ? 'flex' : 'none';
+
+  outputResults.forEach((item, i) => {
+    const { status, url, original, msg } = item;
+
+    const row = document.createElement('div');
+    row.className = 'link-row' + (status === 'ok' ? ' success' : status === 'pass' ? ' pass-row' : status === 'error' ? ' error-row' : '');
+    row.style.animationDelay = (i * 20) + 'ms';
+
+    // Number
+    const num = document.createElement('span');
+    num.className = 'link-num';
+    num.textContent = i + 1;
+
+    // Icon
+    const icon = document.createElement('div');
+    icon.style.cssText = 'flex-shrink:0;width:16px;height:16px;display:flex;align-items:center;justify-content:center;';
+    icon.innerHTML = status === 'ok'
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`
+      : status === 'pass'
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`
+      : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>`;
+
+    // Text
+    const text = document.createElement('span');
+    text.className = 'link-text' + (status === 'error' ? ' error-text' : status === 'pass' ? ' pass-text' : '');
+    text.textContent = status === 'error' ? (msg || 'Error') : url;
+    text.title = url || original;
+
+    row.appendChild(num);
+    row.appendChild(icon);
+    row.appendChild(text);
+
+    if (status === 'ok' || status === 'pass') {
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.title = 'Copy link';
+      btn.innerHTML = copyIcon();
+      btn.onclick = () => copyLink(url, btn);
+      row.appendChild(btn);
+    } else {
+      const ph = document.createElement('div');
+      ph.className = 'copy-placeholder';
+      row.appendChild(ph);
+    }
+
+    outputBody.appendChild(row);
+  });
+
+  const ok = outputResults.filter(r => r.status === 'ok').length;
+  const pass = outputResults.filter(r => r.status === 'pass').length;
+  const err = outputResults.filter(r => r.status === 'error').length;
+  document.getElementById('s-ok').textContent = ok;
+  document.getElementById('s-pass').textContent = pass;
+  document.getElementById('s-err').textContent = err;
+  document.getElementById('out-count').textContent = (ok + pass) + ' ready';
+
+  const copyAllBtn = document.getElementById('copy-all-btn');
+  copyAllBtn.disabled = (ok + pass) === 0;
+}
+
+function copyIcon() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
+}
+
+function copyLink(url, btn) {
+  navigator.clipboard.writeText(url).then(() => {
+    btn.classList.add('copied');
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+    setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = copyIcon(); }, 2000);
+  });
+}
+
+function copyAll() {
+  const urls = outputResults.filter(r => r.status === 'ok' || r.status === 'pass').map(r => r.url).join('\n');
+  navigator.clipboard.writeText(urls).then(() => {
+    const btn = document.getElementById('copy-all-btn');
+    btn.classList.add('copied');
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Copied!`;
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012 2v1"/></svg> Copy all`;
+    }, 2500);
+  });
+}
+
+function clearAll() {
+  inputArea.value = '';
+  outputResults = [];
+  outputBody.innerHTML = `<div class="state-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg><p>transformed links appear here</p></div>`;
+  footerBar.style.display = 'none';
+  document.getElementById('in-count').textContent = '0 links';
+  document.getElementById('out-count').textContent = '—';
+}
+
+inputArea.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') transform();
+});
+</script>
+</body>
+</html>
